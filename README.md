@@ -1,13 +1,18 @@
 # Arc Code CLI
 
-A Mistral Vibe-like CLI tool with llama.cpp backend.
+An interactive agentic coding assistant CLI tool inspired by Mistral Vibe, powered by llama.cpp backend.
 
 ## Features
 
-- AI-powered command-line assistant
-- Basic tool integration (echo, list_files, read_file)
-- Interactive mode with REPL
-- Extensible architecture for adding more tools
+- **AI-Powered Assistant**: Connects to llama-server (OpenAI-compatible API) for intelligent code assistance
+- **Interactive REPL**: Rich terminal UI with styled output, ASCII banner, and command history
+- **Agentic Tool System**: 9 built-in tools for file operations, code search, and command execution
+- **Slash Commands**: 14+ slash commands for session management, settings, and interactive features
+- **Interactive Menu**: Numbered menu system for quick tool access without memorizing commands
+- **Session Management**: Save and load conversation sessions for continuity
+- **Context Window**: Intelligent conversation history management with configurable limits
+- **Thinking Mode**: Toggle verbose AI reasoning for complex tasks
+- **Zero Dependencies**: Uses only Python standard library - easy to install and run
 
 ## Installation
 
@@ -17,39 +22,184 @@ pip install -e .
 
 ## Usage
 
-### Single command mode:
-
-```bash
-arc-code "echo Hello World"
-arc-code "list_files /path/to/directory"
-arc-code "read_file filename.txt"
-```
-
-### Interactive mode:
+### Interactive Mode (Recommended)
 
 ```bash
 arc-code
->>> echo Hello
->>> list_files .
->>> read_file README.md
->>> exit
 ```
 
-### Options:
+This starts the interactive REPL with:
+- Rich ASCII banner
+- Quick start guide
+- Command history with arrow keys
+- Styled prompts and output
 
-- `--model`: Specify the model name exposed by llama-server (default: llama.cpp)
+### Single Command Mode
+
+```bash
+# Read a file
+arc-code "read_file main.py"
+
+# List files
+arc-code "list_files src"
+
+# Search for files
+arc-code "search_files *.py"
+
+# Search in file content
+arc-code "grep_search function src"
+
+# Execute commands
+arc-code "run_command python test.py"
+
+# Write to a file
+arc-code "write_file output.txt Hello World"
+
+# Get environment variables
+arc-code "get_env PATH"
+```
+
+### Options
+
+- `--model`: Model backend name (default: llama.cpp)
 - `--server-url`: llama-server base URL (default: http://localhost:8080)
-- `--verbose`: Enable verbose output
+- `--verbose`: Enable verbose output with detailed tool call information
+- `--quick`: Quick mode - skip banner in interactive mode
 
-## Available Commands
+### Examples
 
-- `echo <message>`: Echo a message
-- `list_files <path>`: List files in a directory
-- `read_file <file>`: Read content of a file
+```bash
+# Use a specific model
+arc-code --model codellama
+
+# Connect to remote server
+arc-code --server-url http://server:8080
+
+# Verbose mode for debugging
+arc-code --verbose "read_file config.py"
+```
+
+## Available Tools
+
+| Tool | Description | Usage |
+|------|-------------|-------|
+| `read_file` | Read file content with line numbers | `read_file <path>` |
+| `write_file` | Create or overwrite a file | `write_file <path> <content>` |
+| `edit_file` | Edit file by replacing text | `edit_file <path> <old> <new>` |
+| `list_files` | List directory contents with details | `list_files <path>` |
+| `search_files` | Search files by pattern | `search_files <pattern> [path]` |
+| `grep_search` | Search text in files | `grep_search <pattern> [path]` |
+| `run_command` | Execute shell commands | `run_command <command>` |
+| `get_env` | Get environment variable | `get_env <name>` |
+| `echo` | Echo a message | `echo <message>` |
+
+## Slash Commands
+
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help and available commands |
+| `/tools` | List all available tools |
+| `/model [name]` | Show or change model |
+| `/server [url]` | Show or change server URL |
+| `/clear` | Clear conversation history |
+| `/history [n]` | Show last n commands |
+| `/think` | Toggle thinking mode |
+| `/verbose` | Toggle verbose output |
+| `/save [file]` | Save session to file |
+| `/load [file]` | Load session from file |
+| `/context` | Show context window info |
+| `/menu` | Open interactive menu |
+| `/exit` or `/quit` | Exit the REPL |
+
+## Interactive Menu
+
+Type `/menu` in the REPL to access the interactive menu system:
+
+```
+┌────────────────────────────────────────────────────────┐
+║           Interactive Menu                             ║
+└────────────────────────────────────────────────────────┘
+
+  File Operations
+    1. Read file          2. Write file
+    3. Edit file          4. List files
+    5. Search files       6. Grep search
+
+  Code & Commands
+    7. Run command        8. Get env variable
+
+  AI & Settings
+    9. Ask AI (normal)    10. Ask AI (thinking)
+    11. Change model       12. Change server
+    13. Save session       14. Load session
+
+  0. Exit
+```
+
+## AI Agent Mode
+
+When you type natural language queries that don't match tool names, the AI agent activates:
+
+```
+❯ explain how the tool system works
+
+💭 Thinking...
+
+The tool system in Arc Code is designed around...
+```
+
+The agent can:
+- Chain multiple tool calls to complete complex tasks
+- Read files, search code, and execute commands
+- Provide explanations and recommendations
+- Help debug issues with detailed analysis
+
+## Session Management
+
+Save your work:
+```
+❯ /save my_session.json
+✓ Saved to my_session.json
+```
+
+Load it later:
+```
+❯ /load my_session.json
+✓ Loaded from my_session.json (42 commands)
+```
+
+## Thinking Mode
+
+Enable detailed reasoning:
+```
+❯ /think
+💭 Thinking mode enabled
+```
+
+The AI will now show step-by-step reasoning before taking actions.
+
+## Architecture
+
+```
+ArcCode/
+├── src/arc_code/
+│   ├── main.py      # CLI entry point with argparse and readline
+│   └── core.py      # Core logic, tools, agent loop, REPL
+├── setup.py         # Package configuration
+└── README.md        # Documentation
+```
+
+### Key Components
+
+- **ArcCodeCore**: Main class handling all functionality
+- **Tool System**: Registry-based extensible tool architecture
+- **Agent Loop**: Multi-step reasoning with tool orchestration
+- **Slash Commands**: Command system for REPL features
+- **Session Manager**: Conversation persistence
 
 ## Development
 
-To contribute, clone the repository and install in development mode:
+### Setup
 
 ```bash
 git clone <repository-url>
@@ -57,6 +207,46 @@ cd ArcCode
 pip install -e .
 ```
 
-## Adding New Tools
+### Adding New Tools
 
-To add new tools, modify the `register_default_tools` method in `src/arc_code/core.py` and add your tool methods.
+1. Add tool method to `ArcCodeCore` class:
+```python
+def tool_my_tool(self, arg1: str) -> str:
+    """Description of my tool"""
+    return f"Result: {arg1}"
+```
+
+2. Register in `register_default_tools`:
+```python
+"my_tool": {
+    "fn": self.tool_my_tool,
+    "desc": "Description",
+    "usage": "my_tool <arg1>",
+}
+```
+
+### Adding Slash Commands
+
+1. Add command method:
+```python
+def cmd_my_command(self, args: str = "") -> str:
+    """Handle my command"""
+    return f"Result: {args}"
+```
+
+2. Register in `register_slash_commands`:
+```python
+"mycommand": {
+    "fn": self.cmd_my_command,
+    "desc": "Description",
+}
+```
+
+## Requirements
+
+- Python 3.8+
+- Running llama-server instance (OpenAI-compatible API)
+
+## License
+
+MIT License
