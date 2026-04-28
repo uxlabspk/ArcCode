@@ -50,10 +50,17 @@ examples:
         help="Model backend to use (default: llama.cpp)"
     )
     parser.add_argument(
+        "--provider",
+        type=str,
+        default="llama.cpp",
+        choices=["llama.cpp", "ollama"],
+        help="AI provider to use (default: llama.cpp, options: llama.cpp, ollama)"
+    )
+    parser.add_argument(
         "--server-url",
         type=str,
         default="http://localhost:8080",
-        help="llama-server base URL (default: http://localhost:8080)"
+        help="Server base URL (default: http://localhost:8080 for llama.cpp, http://localhost:11434 for ollama)"
     )
     parser.add_argument(
         "--verbose",
@@ -80,7 +87,8 @@ examples:
     arc_code = ArcCodeCore(
         model=args.model,
         verbose=args.verbose,
-        server_url=args.server_url
+        server_url=args.server_url,
+        provider=args.provider
     )
 
     # Run with the provided command or start interactive mode

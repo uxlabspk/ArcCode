@@ -18,10 +18,11 @@ from pathlib import Path
 class ArcCodeCore:
     """Main class for Arc Code CLI - Agentic Coding Assistant"""
 
-    def __init__(self, model: str = "llama.cpp", verbose: bool = False, server_url: str = "http://localhost:8080"):
+    def __init__(self, model: str = "llama.cpp", verbose: bool = False, server_url: str = "http://localhost:8080", provider: str = "llama.cpp"):
         self.model = model
         self.verbose = verbose
         self.server_url = server_url.rstrip("/")
+        self.provider = provider  # "llama.cpp" or "ollama"
         self.tools = {}
         self.slash_commands = {}
         self.history = []
@@ -80,7 +81,7 @@ class ArcCodeCore:
             f"{self._style('v0.2.0', 'gray')} · "
             f"{self._style('Agentic Coding Assistant', 'cyan')}"
         )
-        meta = f"{self._style(f'Backend: {self.model} | Server: {self.server_url}', 'gray')}"
+        meta = f"{self._style(f'Backend: {self.model} | Provider: {self.provider} | Server: {self.server_url}', 'gray')}"
         info = f"Type {self._style('/help', 'cyan', bold=True)} for commands or {self._style('/menu', 'cyan', bold=True)} for interactive mode"
 
         print()
@@ -409,6 +410,11 @@ class ArcCodeCore:
                 "fn": self.cmd_tools,
                 "desc": "List available tools",
             },
+            "config": {
+                "fn": self.cmd_config,
+                "desc": "Show or change provider configuration",
+                "usage": "/config [provider] [model] [url]",
+            },
             "model": {
                 "fn": self.cmd_model,
                 "desc": "Show or change model settings",
@@ -508,6 +514,53 @@ class ArcCodeCore:
         output.append(f"\n  {self._style(f'Total: {len(self.tools)} tools', 'cyan')}")
         output.append("")
         return "\n".join(output)
+
+    def cmd_config(self, args: str = "") -> str:
+        """Show or change provider configuration"""
+        if not args.strip():
+            # Show current configuration
+            output = [f"\n{self._style('⚙️  Current Configuration', 'cyan', bold=True)}"]
+            output.append(f"  {self._style('─' * 50, 'gray')}")
+            output.append(f"  {self._style('Provider:', 'gray')} {self._style(self.provider, 'yellow', bold=True)}")
+            output.append(f"  {self._style('Model:', 'gray')} {self._style(self.model, 'yellow', bold=True)}")
+            output.append(f"  {self._style('Server:', 'gray')} {self._style(self.server_url, 'yellow', bold=True)}")
+            output.append(f"\n  {self._style('Available Providers:', 'cyan')}")
+            output.append(f"    • {self._style('llama.cpp', 'green')} - Local llama-server (default)")
+            output.append(f"    • {self._style('ollama', 'green')} - Ollama API")
+            output.append(f"\n  {self._style('Usage:', 'gray')} {self._style('/config [provider] [model] [url]', 'dim')}")
+            output.append(f"\n  {self._style('Examples:', 'gray')}")
+            output.append(f"    {self._style('/config ollama codellama http://localhost:11434', 'dim')}")
+            output.append(f"    {self._style('/config llama.cpp llama.cpp http://localhost:8080', 'dim')}")
+            output.append("")
+            return "\n".join(output)
+        
+        # Parse arguments
+        parts = args.strip().split()
+        if len(parts) < 1:
+            return f"{self._style('✗', 'red')} Usage: /config [provider] [model] [url]"
+        
+        provider = parts[0].lower()
+        if provider not in ["llama.cpp", "ollama"]:
+            return f"{self._style('✗', 'red')} Invalid provider. Use 'llama.cpp' or 'ollama'"
+        
+        old_provider = self.provider
+        self.provider = provider
+        
+        # Update model if provided
+        if len(parts) >= 2:
+            self.model = parts[1]
+        
+        # Update server URL if provided
+        if len(parts) >= 3:
+            self.server_url = parts[2].rstrip("/")
+        elif provider == "ollama":
+            # Default Ollama URL
+            self.server_url = "http://localhost:11434"
+        else:
+            # Default llama.cpp URL
+            self.server_url = "http://localhost:8080"
+        
+        return f"{self._style('✓', 'green')} Provider changed: {self._style(old_provider, 'gray')} → {self._style(self.provider, 'green', bold=True)}\n  {self._style('Model:', 'gray')} {self.model} | {self._style('Server:', 'gray')} {self.server_url}"
 
     def cmd_model(self, args: str = "") -> str:
         """Show or change model settings"""
@@ -628,6 +681,7 @@ class ArcCodeCore:
         menu.append(f"    {self._style('9.', 'yellow')} Ask AI (normal)    {self._style('10.', 'yellow')} Ask AI (thinking)")
         menu.append(f"    {self._style('11.', 'yellow')} Change model       {self._style('12.', 'yellow')} Change server")
         menu.append(f"    {self._style('13.', 'yellow')} Save session       {self._style('14.', 'yellow')} Load session")
+        menu.append(f"    {self._style('15.', 'yellow')} Configure provider")
         menu.append("")
         menu.append(f"  {self._style('0.', 'red')} Exit")
         menu.append("")
@@ -643,7 +697,7 @@ class ArcCodeCore:
     # ==========================================
 
     def _call_llama_server(self, messages: List[Dict[str, str]]) -> str:
-        """Call the llama-server API with streaming support"""
+        """Call the LLM server API with streaming support (supports both llama.cpp and Ollama)"""
         payload = {
             "model": self.model,
             "messages": messages,
@@ -652,8 +706,15 @@ class ArcCodeCore:
             "max_tokens": 8192,
         }
         data = json.dumps(payload).encode("utf-8")
+        
+        # Determine API endpoint based on provider
+        if self.provider == "ollama":
+            api_endpoint = f"{self.server_url}/v1/chat/completions"
+        else:  # llama.cpp
+            api_endpoint = f"{self.server_url}/v1/chat/completions"
+        
         req = urllib.request.Request(
-            f"{self.server_url}/v1/chat/completions",
+            api_endpoint,
             data=data,
             headers={"Content-Type": "application/json"},
             method="POST",
@@ -686,7 +747,8 @@ class ArcCodeCore:
                 sys.stdout.write("\r" + " " * 50 + "\r")  # Clear progress line
                 return "".join(full_content)
         except urllib.error.HTTPError as e:
-            return f"Error: llama-server HTTP {e.code}"
+            error_body = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else ''
+            return f"Error: {self.provider} HTTP {e.code} - {error_body[:200]}"
         except Exception as e:
             return f"Error: {str(e)}"
 
@@ -946,6 +1008,18 @@ class ArcCodeCore:
                 filename = input(f"{self._style('Filename: ', 'cyan')}")
                 if filename:
                     print(self.execute_command(f"/load {filename}"))
+            elif choice == "15":
+                print(f"{self._style('Current provider:', 'cyan')} {self.provider}")
+                provider = input(f"{self._style('Provider (llama.cpp/ollama): ', 'cyan')}")
+                if provider:
+                    model = input(f"{self._style('Model name: ', 'cyan')}")
+                    url = input(f"{self._style('Server URL (optional): ', 'cyan')}")
+                    cmd = f"/config {provider}"
+                    if model:
+                        cmd += f" {model}"
+                    if url:
+                        cmd += f" {url}"
+                    print(self.execute_command(cmd))
             else:
                 print(f"{self._style('Invalid option', 'red')}")
 

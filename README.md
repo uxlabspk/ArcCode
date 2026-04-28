@@ -4,10 +4,11 @@ An interactive agentic coding assistant CLI tool inspired by Mistral Vibe, power
 
 ## Features
 
-- **AI-Powered Assistant**: Connects to llama-server (OpenAI-compatible API) for intelligent code assistance
+- **AI-Powered Assistant**: Connects to llama-server or Ollama (OpenAI-compatible API) for intelligent code assistance
+- **Multiple Providers**: Switch between llama.cpp and Ollama providers with `/config` command
 - **Interactive REPL**: Rich terminal UI with styled output, ASCII banner, and command history
 - **Agentic Tool System**: 9 built-in tools for file operations, code search, and command execution
-- **Slash Commands**: 14+ slash commands for session management, settings, and interactive features
+- **Slash Commands**: 15+ slash commands for session management, settings, and interactive features
 - **Interactive Menu**: Numbered menu system for quick tool access without memorizing commands
 - **Session Management**: Save and load conversation sessions for continuity
 - **Context Window**: Intelligent conversation history management with configurable limits
@@ -61,8 +62,9 @@ arc-code "get_env PATH"
 
 ### Options
 
-- `--model`: Model backend name (default: llama.cpp)
-- `--server-url`: llama-server base URL (default: http://localhost:8080)
+- `--model`: Model name (default: llama.cpp)
+- `--provider`: AI provider (default: llama.cpp, options: llama.cpp, ollama)
+- `--server-url`: Server base URL (default: http://localhost:8080 for llama.cpp, http://localhost:11434 for ollama)
 - `--verbose`: Enable verbose output with detailed tool call information
 - `--quick`: Quick mode - skip banner in interactive mode
 
@@ -72,8 +74,14 @@ arc-code "get_env PATH"
 # Use a specific model
 arc-code --model codellama
 
+# Use Ollama provider
+arc-code --provider ollama --model codellama
+
 # Connect to remote server
 arc-code --server-url http://server:8080
+
+# Use Ollama with custom URL
+arc-code --provider ollama --server-url http://ollama-server:11434
 
 # Verbose mode for debugging
 arc-code --verbose "read_file config.py"
@@ -99,6 +107,7 @@ arc-code --verbose "read_file config.py"
 |---------|-------------|
 | `/help` | Show help and available commands |
 | `/tools` | List all available tools |
+| `/config [provider] [model] [url]` | Show or change provider configuration |
 | `/model [name]` | Show or change model |
 | `/server [url]` | Show or change server URL |
 | `/clear` | Clear conversation history |
@@ -110,6 +119,62 @@ arc-code --verbose "read_file config.py"
 | `/context` | Show context window info |
 | `/menu` | Open interactive menu |
 | `/exit` or `/quit` | Exit the REPL |
+
+## Provider Configuration
+
+Arc Code supports multiple AI providers. You can configure them using the `/config` command:
+
+### Using `/config` Command
+
+```bash
+# Show current configuration
+❯ /config
+
+⚙️  Current Configuration
+  ──────────────────────────────────────────────────
+  Provider: llama.cpp
+  Model: llama.cpp
+  Server: http://localhost:8080
+
+  Available Providers:
+    • llama.cpp - Local llama-server (default)
+    • ollama - Ollama API
+
+  Usage: /config [provider] [model] [url]
+
+  Examples:
+    /config ollama codellama http://localhost:11434
+    /config llama.cpp llama.cpp http://localhost:8080
+```
+
+### Switch to Ollama
+
+```bash
+# Switch to Ollama with default settings
+❯ /config ollama
+
+# Switch to Ollama with specific model
+❯ /config ollama codellama
+
+# Switch to Ollama with custom model and URL
+❯ /config ollama mistral http://localhost:11434
+```
+
+### Switch back to llama.cpp
+
+```bash
+❯ /config llama.cpp llama.cpp http://localhost:8080
+```
+
+### Using CLI Arguments
+
+```bash
+# Start with Ollama
+arc-code --provider ollama --model codellama
+
+# Start with llama.cpp (default)
+arc-code --provider llama.cpp --model llama.cpp
+```
 
 ## Interactive Menu
 
@@ -132,6 +197,7 @@ Type `/menu` in the REPL to access the interactive menu system:
     9. Ask AI (normal)    10. Ask AI (thinking)
     11. Change model       12. Change server
     13. Save session       14. Load session
+    15. Configure provider
 
   0. Exit
 ```
@@ -245,7 +311,28 @@ def cmd_my_command(self, args: str = "") -> str:
 ## Requirements
 
 - Python 3.8+
-- Running llama-server instance (OpenAI-compatible API)
+- Running llama-server instance (OpenAI-compatible API) OR Ollama server
+
+### Using with llama.cpp
+
+1. Install llama.cpp
+2. Start the server:
+```bash
+llama-server -m your-model.gguf --port 8080
+```
+
+### Using with Ollama
+
+1. Install Ollama from https://ollama.com
+2. Pull a model:
+```bash
+ollama pull codellama
+```
+3. Ollama runs automatically on http://localhost:11434
+4. Configure Arc Code:
+```bash
+arc-code --provider ollama --model codellama
+```
 
 ## License
 
