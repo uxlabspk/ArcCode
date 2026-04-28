@@ -23,6 +23,28 @@ def setup_readline():
         pass
 
     readline.set_history_length(1000)
+    
+    # Configure readline for proper line wrapping and display
+    # Set the display width to terminal width for proper wrapping
+    try:
+        import fcntl
+        import termios
+        import struct
+        
+        # Get terminal size
+        fd = sys.stdin.fileno()
+        winsize = struct.pack("HHHH", 0, 0, 0, 0)
+        winsize = fcntl.ioctl(fd, termios.TIOCGWINSZ, winsize)
+        rows, cols, _, _ = struct.unpack("HHHH", winsize)
+        
+        # Tell readline about terminal width for proper line wrapping
+        readline.set_screen_dimensions(cols, rows)
+    except (ImportError, AttributeError, OSError):
+        # If we can't get terminal size, use a reasonable default
+        pass
+    
+    # Enable proper line editing - minimal safe configuration
+    readline.parse_and_bind('set horizontal-scroll-mode off')
 
     # Save history on exit
     import atexit
