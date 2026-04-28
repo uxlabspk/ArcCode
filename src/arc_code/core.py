@@ -13,25 +13,30 @@ import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional, List
 from pathlib import Path
+from arc_code.settings import SettingsManager
 
 
 class ArcCodeCore:
     """Main class for Arc Code CLI - Agentic Coding Assistant"""
 
-    def __init__(self, model: str = "llama.cpp", verbose: bool = False, server_url: str = "http://localhost:8080", provider: str = "llama.cpp"):
-        self.model = model
-        self.verbose = verbose
-        self.server_url = server_url.rstrip("/")
-        self.provider = provider  # "llama.cpp" or "ollama"
+    def __init__(self, model: str = "llama.cpp", verbose: bool = False, server_url: str = "http://localhost:8080", provider: str = "llama.cpp", settings: Optional[SettingsManager] = None):
+        self.settings = settings or SettingsManager()
+        
+        # Load settings from persistent config (CLI args override saved settings)
+        self.model = model if model != "llama.cpp" else self.settings.get("model", "llama.cpp")
+        self.verbose = verbose or self.settings.get("verbose", False)
+        self.server_url = (server_url if server_url != "http://localhost:8080" 
+                          else self.settings.get("server_url", "http://localhost:8080")).rstrip("/")
+        self.provider = provider if provider != "llama.cpp" else self.settings.get("provider", "llama.cpp")
+        self.thinking_mode = self.settings.get("thinking_mode", False)
+        self.max_context_messages = self.settings.get("max_context_messages", 20)
+        self.max_history = self.settings.get("max_history", 100)
+        self.conversation_history = []
+        self.session_started = False
+        self.current_session = None
         self.tools = {}
         self.slash_commands = {}
         self.history = []
-        self.max_history = 100
-        self.conversation_history = []
-        self.max_context_messages = 20  # Limit context window
-        self.session_started = False
-        self.thinking_mode = False
-        self.current_session = None
 
         # UI Configuration
         self._colors = {
@@ -67,59 +72,66 @@ class ArcCodeCore:
         return result
 
     def _print_banner(self):
-        """Print enhanced ASCII art banner"""
+        """Print enhanced professional banner"""
         logo = [
-            " .:::.    ",
-            ":-=:.:.  ",
-            ":..=-:.  ",
-            " .:-=:.  ",
-            "  ..:-.  ",
+            "     █████╗ ██████╗ ██████╗     ",
+            "    ██╔══██╗██╔══██╗██╔══██╗    ",
+            "    ███████║██████╔╝██████╔╝    ",
+            "    ██╔══██║██╔══██╗██╔══██╗    ",
+            "    ██║  ██║██████╔╝██║  ██║    ",
+            "    ╚═╝  ╚═╝╚═════╝ ╚═╝  ╚═╝    ",
         ]
 
         title = (
-            f"{self._style('Arc Code', 'orange', bold=True)} "
-            f"{self._style('v0.2.0', 'gray')} · "
             f"{self._style('Agentic Coding Assistant', 'cyan')}"
         )
-        meta = f"{self._style(f'Backend: {self.model} | Provider: {self.provider} | Server: {self.server_url}', 'gray')}"
-        info = f"Type {self._style('/help', 'cyan', bold=True)} for commands or {self._style('/menu', 'cyan', bold=True)} for interactive mode"
-
+        version = f"{self._style('v0.3.0', 'gray')}"
+        
         print()
-        print(f"{logo[0]} {title}")
-        print(f"{logo[1]} {meta}")
-        print(f"{logo[2]} {info}")
-        print(f"{logo[3]}")
-        print(f"{logo[4]}")
+        print(f"  {self._style('████████╗ ██████╗ ██████╗ ██╗██████╗ ████████╗', 'orange', bold=True)}")
+        print(f"  {self._style('╚══██╔══╝██╔═══██╗██╔══██╗██║██╔══██╗╚══██╔══╝', 'orange', bold=True)}")
+        print(f"  {self._style('   ██║   ██║   ██║██████╔╝██║██████╔╝   ██║   ', 'orange', bold=True)}")
+        print(f"  {self._style('   ██║   ██║   ██║██╔══██╗██║██╔═══╝    ██║   ', 'orange', bold=True)}")
+        print(f"  {self._style('   ██║   ╚██████╔╝██║  ██║██║██║        ██║   ', 'orange', bold=True)}")
+        print(f"  {self._style('   ╚═╝    ╚═════╝ ╚═╝  ╚═╝╚═╝╚═╝        ╚═╝   ', 'orange', bold=True)}")
+        print()
+        print(f"  {title} {self._style('·', 'gray')} {version}")
+        print(f"  {self._style('─' * 60, 'dark_gray')}")
+        print(f"  {self._style('Provider:', 'gray')} {self._style(self.provider, 'green', bold=True)}  "
+              f"{self._style('│', 'dark_gray')}  "
+              f"{self._style('Model:', 'gray')} {self._style(self.model, 'yellow', bold=True)}  "
+              f"{self._style('│', 'dark_gray')}  "
+              f"{self._style('Server:', 'gray')} {self._style(self.server_url, 'cyan')}")
         print()
 
         # Show quick stats
         cwd = os.getcwd()
-        print(f"  {self._style('📁', 'cyan')} {self._style('Working Dir:', 'gray')} {cwd}")
-        print(f"  {self._style('⚡', 'cyan')} {self._style('Tools:', 'gray')} {len(self.tools)} registered")
-        print(f"  {self._style('📝', 'cyan')} {self._style('History:', 'gray')} {len(self.history)} commands")
+        print(f"  {self._style('◉', 'cyan')} {self._style('Working Dir:', 'gray')} {cwd}")
+        print(f"  {self._style('◉', 'cyan')} {self._style('Tools:', 'gray')} {len(self.tools)} registered  "
+              f"{self._style('│', 'dark_gray')}  "
+              f"{self._style('History:', 'gray')} {len(self.history)} commands")
         print()
 
         home_dir = os.path.expanduser("~")
         if os.getcwd() == home_dir:
-            warn = self._style("⚠ WARNING: You are in the home directory", "yellow", bold=True)
-            warn_detail = self._style("  Running in this location is not recommended. Consider navigating to a project directory.", "yellow")
-            print(f"  {warn}")
-            print(f"  {warn_detail}")
+            print(f"  {self._style('⚠  WARNING: You are in the home directory', 'yellow', bold=True)}")
+            print(f"  {self._style('   Running in this location is not recommended.', 'yellow')}")
+            print(f"  {self._style('   Consider navigating to a project directory.', 'yellow')}")
             print()
 
     def _print_tool_call(self, tool_name: str, args: Dict[str, Any]):
         """Print a formatted tool call indicator"""
-        print(f"\n  {self._style('🔧', 'cyan')} {self._style(f'Calling: {tool_name}', 'cyan', bold=True)}")
+        print(f"\n  {self._style('→', 'cyan', bold=True)} {self._style(f'Calling {tool_name}...', 'cyan')}")
         if args and self.verbose:
             for key, val in args.items():
                 print(f"     {self._style(f'{key}:', 'gray')} {self._style(str(val), 'yellow')}")
 
     def _print_tool_result(self, success: bool, preview: str = ""):
-        """Print a formatted tool result indicator"""
+        """Print a formatted tool results indicator"""
         icon = "✓" if success else "✗"
         color = "green" if success else "red"
         status = "Success" if success else "Failed"
-        print(f"  {self._style(icon, color)} {self._style(status, color)}")
+        print(f"  {self._style(icon, color, bold=True)} {self._style(status, color)}")
         if preview and self.verbose:
             print(f"     {self._style(preview[:100], 'gray')}")
         print()
@@ -460,6 +472,11 @@ class ArcCodeCore:
                 "fn": self.cmd_menu,
                 "desc": "Show interactive menu",
             },
+            "settings": {
+                "fn": self.cmd_settings,
+                "desc": "Show or manage persistent settings",
+                "usage": "/settings [show|reset]",
+            },
             "exit": {
                 "fn": self.cmd_exit,
                 "desc": "Exit the REPL",
@@ -560,14 +577,24 @@ class ArcCodeCore:
             # Default llama.cpp URL
             self.server_url = "http://localhost:8080"
         
-        return f"{self._style('✓', 'green')} Provider changed: {self._style(old_provider, 'gray')} → {self._style(self.provider, 'green', bold=True)}\n  {self._style('Model:', 'gray')} {self.model} | {self._style('Server:', 'gray')} {self.server_url}"
+        # Save settings to persistent config
+        self.settings.update({
+            "provider": self.provider,
+            "model": self.model,
+            "server_url": self.server_url
+        })
+        self.settings.save()
+        
+        return f"{self._style('✓', 'green')} Provider changed: {self._style(old_provider, 'gray')} → {self._style(self.provider, 'green', bold=True)}\n  {self._style('Model:', 'gray')} {self.model} | {self._style('Server:', 'gray')} {self.server_url}\n  {self._style('Settings saved!', 'dim')}"
 
     def cmd_model(self, args: str = "") -> str:
         """Show or change model settings"""
         if args.strip():
             old_model = self.model
             self.model = args.strip()
-            return f"{self._style('✓', 'green')} Model changed: {self._style(old_model, 'gray')} → {self._style(self.model, 'green', bold=True)}"
+            self.settings.set("model", self.model)
+            self.settings.save()
+            return f"{self._style('✓', 'green')} Model changed: {self._style(old_model, 'gray')} → {self._style(self.model, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
         return f"\n  {self._style('Model:', 'cyan')} {self._style(self.model, 'yellow', bold=True)}\n"
 
     def cmd_server(self, args: str = "") -> str:
@@ -575,7 +602,9 @@ class ArcCodeCore:
         if args.strip():
             old_url = self.server_url
             self.server_url = args.strip().rstrip("/")
-            return f"{self._style('✓', 'green')} Server changed: {self._style(old_url, 'gray')} → {self._style(self.server_url, 'green', bold=True)}"
+            self.settings.set("server_url", self.server_url)
+            self.settings.save()
+            return f"{self._style('✓', 'green')} Server changed: {self._style(old_url, 'gray')} → {self._style(self.server_url, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
         return f"\n  {self._style('Server:', 'cyan')} {self._style(self.server_url, 'yellow', bold=True)}\n"
 
     def cmd_clear(self, args: str = "") -> str:
@@ -691,6 +720,42 @@ class ArcCodeCore:
     def cmd_exit(self, args: str = "") -> str:
         """Exit the REPL"""
         return "EXIT"
+
+    def cmd_settings(self, args: str = "") -> str:
+        """Show or manage persistent settings"""
+        if not args.strip() or args.strip() == "show":
+            output = [f"\n{self._style('Persistent Settings', 'cyan', bold=True)}"]
+            output.append(f"  {self._style('─' * 50, 'gray')}")
+            output.append(f"  {self._style('Config file:', 'gray')} {self._style(str(self.settings.config_file), 'yellow')}")
+            output.append(f"")
+            output.append(f"  {self._style('Current Settings:', 'cyan', bold=True)}")
+            output.append(f"    {self._style('Provider:', 'gray')} {self._style(self.settings.get('provider'), 'yellow', bold=True)}")
+            output.append(f"    {self._style('Model:', 'gray')} {self._style(self.settings.get('model'), 'yellow', bold=True)}")
+            output.append(f"    {self._style('Server URL:', 'gray')} {self._style(self.settings.get('server_url'), 'yellow', bold=True)}")
+            output.append(f"    {self._style('Verbose:', 'gray')} {self._style(str(self.settings.get('verbose')), 'yellow')}")
+            output.append(f"    {self._style('Thinking Mode:', 'gray')} {self._style(str(self.settings.get('thinking_mode')), 'yellow')}")
+            output.append(f"    {self._style('Max Context:', 'gray')} {self._style(str(self.settings.get('max_context_messages')), 'yellow')}")
+            output.append(f"")
+            output.append(f"  {self._style('Usage:', 'gray')}")
+            output.append(f"    {self._style('/settings', 'dim')} - Show current settings")
+            output.append(f"    {self._style('/settings reset', 'dim')} - Reset to defaults")
+            output.append(f"    {self._style('/config [provider] [model] [url]', 'dim')} - Change provider config")
+            output.append(f"    {self._style('/model [name]', 'dim')} - Change model")
+            output.append(f"    {self._style('/server [url]', 'dim')} - Change server URL")
+            output.append("")
+            return "\n".join(output)
+        
+        if args.strip() == "reset":
+            self.settings.reset()
+            # Reload settings into instance
+            self.provider = self.settings.get("provider")
+            self.model = self.settings.get("model")
+            self.server_url = self.settings.get("server_url").rstrip("/")
+            self.verbose = self.settings.get("verbose", False)
+            self.thinking_mode = self.settings.get("thinking_mode", False)
+            return f"{self._style('✓', 'green')} Settings reset to defaults\n  {self._style('Config file:', 'gray')} {self._style(str(self.settings.config_file), 'dim')}"
+        
+        return f"{self._style('✗', 'red')} Unknown argument. Use '/settings' or '/settings reset'"
 
     # ==========================================
     # LLM Integration
@@ -1076,16 +1141,17 @@ class ArcCodeCore:
             # Interactive REPL mode
             self._print_banner()
 
-            print(f"{self._style('Quick Start:', 'cyan', bold=True)}")
-            print(f"  • Type naturally to ask questions or give instructions")
-            print(f"  • Use {self._style('/menu', 'magenta', bold=True)} for interactive tool selection")
-            print(f"  • Use {self._style('/help', 'magenta', bold=True)} to see all commands")
-            print(f"  • Use {self._style('↑/↓', 'gray')} arrow keys for command history\n")
+            print(f"  {self._style('Quick Start:', 'cyan', bold=True)}")
+            print(f"    {self._style('•', 'gray')} Type naturally to ask questions or give instructions")
+            print(f"    {self._style('•', 'gray')} Use {self._style('/menu', 'magenta', bold=True)} for interactive tool selection")
+            print(f"    {self._style('•', 'gray')} Use {self._style('/help', 'magenta', bold=True)} to see all commands")
+            print(f"    {self._style('•', 'gray')} Use {self._style('/settings', 'magenta', bold=True)} to view saved configuration")
+            print(f"    {self._style('•', 'gray')} Use {self._style('↑/↓', 'gray')} arrow keys for command history\n")
 
             while True:
                 try:
                     # Styled prompt
-                    prompt = f"{self._style('❯', 'orange', bold=True)} "
+                    prompt = f"  {self._style('▶', 'orange', bold=True)} "
                     user_input = input(prompt)
 
                     # Handle empty input
@@ -1105,7 +1171,8 @@ class ArcCodeCore:
 
                     # Check for exit
                     if result == "EXIT":
-                        print(f"\n{self._style('Goodbye!', 'green', bold=True)}")
+                        print(f"\n  {self._style('Goodbye!', 'green', bold=True)}")
+                        print(f"  {self._style(f'Session: {len(self.history)} commands executed', 'gray')}")
                         break
 
                     # Only print if result wasn't already streamed
@@ -1116,10 +1183,12 @@ class ArcCodeCore:
                         result = result[12:]
 
                 except KeyboardInterrupt:
-                    print(f"\n{self._style('Goodbye!', 'green', bold=True)}")
+                    print(f"\n  {self._style('Goodbye!', 'green', bold=True)}")
+                    print(f"  {self._style(f'Session: {len(self.history)} commands executed', 'gray')}")
                     break
                 except EOFError:
-                    print(f"\n{self._style('Goodbye!', 'green', bold=True)}")
+                    print(f"\n  {self._style('Goodbye!', 'green', bold=True)}")
+                    print(f"  {self._style(f'Session: {len(self.history)} commands executed', 'gray')}")
                     break
 
     def _format_size(self, size: int) -> str:

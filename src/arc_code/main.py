@@ -10,6 +10,7 @@ import os
 import readline  # Enable readline for history and arrow keys
 
 from arc_code.core import ArcCodeCore
+from arc_code.settings import SettingsManager
 
 
 def setup_readline():
@@ -105,12 +106,16 @@ examples:
     # Setup readline for history support
     setup_readline()
 
-    # Initialize ArcCode core
+    # Load persistent settings
+    settings = SettingsManager()
+
+    # Initialize ArcCode core with settings
     arc_code = ArcCodeCore(
         model=args.model,
         verbose=args.verbose,
         server_url=args.server_url,
-        provider=args.provider
+        provider=args.provider,
+        settings=settings
     )
 
     # Run with the provided command or start interactive mode

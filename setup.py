@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as f:
 
 setup(
     name="arc_code",
-    version="0.2.0",
+    version="0.3.0",
     author="Arc Code Contributors",
     description="Agentic Coding Assistant - Interactive CLI tool inspired by Mistral Vibe",
     long_description=long_description,
