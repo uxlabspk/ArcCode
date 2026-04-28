@@ -766,15 +766,37 @@ class ArcCodeCore:
         messages.extend(self.conversation_history[-self.max_context_messages:])
         messages.append({"role": "user", "content": user_input})
 
-        # Show thinking indicator
-        print(f"\n  {self._style('💭', 'cyan')} {self._style('Thinking...', 'gray')}", end="")
-        sys.stdout.flush()
+        # Show spinner with elapsed time
+        start_time = time.time()
+        spin_idx = 0
+        spinner_running = True
+        
+        def update_spinner():
+            """Update spinner animation with elapsed time"""
+            nonlocal spin_idx
+            while spinner_running:
+                elapsed = time.time() - start_time
+                spin = self._spinner_frames[spin_idx % len(self._spinner_frames)]
+                sys.stdout.write(f"\r  {self._style(spin, 'cyan')} Thinking... {self._style(f'{elapsed:.1f}s', 'gray')}")
+                sys.stdout.flush()
+                spin_idx += 1
+                time.sleep(0.1)
+        
+        import threading
+        spinner_thread = threading.Thread(target=update_spinner, daemon=True)
+        spinner_thread.start()
 
         for step in range(8):  # Max 8 steps for complex tasks
             response = self._call_llama_server(messages)
 
-            # Clear thinking indicator
-            print("\r" + " " * 40 + "\r", end="")
+            # Stop spinner
+            spinner_running = False
+            if spinner_thread:
+                spinner_thread.join(timeout=0.2)
+            
+            # Clear spinner line
+            sys.stdout.write("\r" + " " * 60 + "\r")
+            sys.stdout.flush()
 
             try:
                 data = json.loads(response)
