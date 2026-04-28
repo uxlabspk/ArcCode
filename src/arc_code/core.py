@@ -643,12 +643,13 @@ class ArcCodeCore:
     # ==========================================
 
     def _call_llama_server(self, messages: List[Dict[str, str]]) -> str:
-        """Call the llama-server API"""
+        """Call the llama-server API with streaming support"""
         payload = {
             "model": self.model,
             "messages": messages,
             "temperature": 0.2,
-            "stream": False,
+            "stream": True,
+            "max_tokens": 8192,
         }
         data = json.dumps(payload).encode("utf-8")
         req = urllib.request.Request(
@@ -658,10 +659,32 @@ class ArcCodeCore:
             method="POST",
         )
         try:
-            with urllib.request.urlopen(req, timeout=120) as resp:
-                body = resp.read().decode("utf-8")
-            payload = json.loads(body)
-            return payload["choices"][0]["message"]["content"]
+            with urllib.request.urlopen(req, timeout=300) as resp:
+                # Handle streaming response
+                full_content = []
+                spin_idx = 0
+                for line in resp:
+                    line = line.decode("utf-8").strip()
+                    if line.startswith("data: "):
+                        line = line[6:]
+                    if line == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(line)
+                        delta = chunk.get("choices", [{}])[0].get("delta", {})
+                        content = delta.get("content")
+                        if content:
+                            full_content.append(content)
+                            # Show live progress
+                            spin = self._spinner_frames[spin_idx % len(self._spinner_frames)]
+                            chars = sum(len(c) for c in full_content)
+                            sys.stdout.write(f"\r  {self._style(spin, 'cyan')} Receiving... ({chars} chars)")
+                            sys.stdout.flush()
+                            spin_idx += 1
+                    except json.JSONDecodeError:
+                        continue
+                sys.stdout.write("\r" + " " * 50 + "\r")  # Clear progress line
+                return "".join(full_content)
         except urllib.error.HTTPError as e:
             return f"Error: llama-server HTTP {e.code}"
         except Exception as e:
