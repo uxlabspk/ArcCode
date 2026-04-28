@@ -32,6 +32,8 @@ class ArcCodeCore:
             "cyan": "\033[38;5;39m",
             "yellow": "\033[38;5;220m",
             "gray": "\033[38;5;245m",
+            "green": "\033[38;5;46m",
+            "red": "\033[38;5;196m",
         }
         return f"{colors.get(color, '')}{text}{colors['reset']}"
 
@@ -177,27 +179,59 @@ class ArcCodeCore:
 
         return "Error: Agent exceeded maximum steps"
     
+    def _print_help(self):
+        """Print help information"""
+        help_text = f"""
+{self._style('Available Commands:', 'cyan')}
+  {self._style('echo', 'green')} <message>          Echo a message
+  {self._style('list_files', 'green')} <path>        List files in a directory
+  {self._style('read_file', 'green')} <file>        Read content of a file
+  {self._style('/help', 'green')}                   Show this help message
+  {self._style('exit', 'green')} or {self._style('quit', 'green')}           Exit the REPL
+
+{self._style('Examples:', 'cyan')}
+  >>> echo Hello World
+  >>> list_files .
+  >>> read_file README.md
+  >>> /help
+"""
+        print(help_text)
+
     def run(self, command: Optional[str] = None):
-        """Main run method"""
+        """Main run method - handles single command or interactive REPL mode"""
         if command:
+            # Single command mode
             result = self.execute_command(command)
             print(result)
         else:
+            # Interactive REPL mode
             self._print_banner()
-            print("Arc Code CLI - Ready for commands")
-            print("Type 'exit' to quit")
+            print(f"Type {self._style('/help', 'cyan')} for commands or {self._style('exit', 'cyan')} to quit\n")
             
-            # Simple REPL loop
             while True:
                 try:
-                    user_input = input("> ")
+                    # Styled prompt
+                    prompt = self._style(">>> ", "cyan")
+                    user_input = input(prompt)
+                    
+                    # Handle special commands
                     if user_input.lower() in ['exit', 'quit']:
+                        print(self._style("Goodbye!", "green"))
                         break
-                    if user_input.strip():
-                        result = self.execute_command(user_input)
-                        print(result)
+                    
+                    if user_input.strip() == '/help':
+                        self._print_help()
+                        continue
+                    
+                    if not user_input.strip():
+                        continue
+                    
+                    # Execute command and display result
+                    result = self.execute_command(user_input)
+                    print(result)
+                    
                 except KeyboardInterrupt:
-                    print("\nGoodbye!")
+                    print(f"\n{self._style('Goodbye!', 'green')}")
                     break
                 except Exception as e:
-                    print(f"Error: {str(e)}")
+                    print(f"{self._style('Error:', 'red')} {str(e)}")
