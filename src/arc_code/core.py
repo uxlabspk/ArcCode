@@ -696,7 +696,7 @@ class ArcCodeCore:
     # LLM Integration
     # ==========================================
 
-    def _call_llama_server(self, messages: List[Dict[str, str]]) -> str:
+    def _call_llama_server(self, messages: List[Dict[str, str]], stream_output: bool = True, on_first_token=None) -> str:
         """Call the LLM server API with streaming support (supports both llama.cpp and Ollama)"""
         payload = {
             "model": self.model,
@@ -723,7 +723,7 @@ class ArcCodeCore:
             with urllib.request.urlopen(req, timeout=300) as resp:
                 # Handle streaming response
                 full_content = []
-                spin_idx = 0
+                first_token_received = False
                 for line in resp:
                     line = line.decode("utf-8").strip()
                     if line.startswith("data: "):
@@ -736,15 +736,17 @@ class ArcCodeCore:
                         content = delta.get("content")
                         if content:
                             full_content.append(content)
-                            # Show live progress
-                            spin = self._spinner_frames[spin_idx % len(self._spinner_frames)]
-                            chars = sum(len(c) for c in full_content)
-                            sys.stdout.write(f"\r  {self._style(spin, 'cyan')} Receiving... ({chars} chars)")
-                            sys.stdout.flush()
-                            spin_idx += 1
+                            # Signal when first token arrives
+                            if not first_token_received and on_first_token:
+                                on_first_token()
+                                first_token_received = True
+                            # Stream output in real-time
+                            if stream_output:
+                                print(content, end="", flush=True)
                     except json.JSONDecodeError:
                         continue
-                sys.stdout.write("\r" + " " * 50 + "\r")  # Clear progress line
+                if stream_output and full_content:
+                    print()  # Add newline after streaming completes
                 return "".join(full_content)
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else ''
@@ -770,6 +772,7 @@ class ArcCodeCore:
         start_time = time.time()
         spin_idx = 0
         spinner_running = True
+        was_streamed = False  # Track if response was streamed
         
         def update_spinner():
             """Update spinner animation with elapsed time"""
@@ -787,29 +790,41 @@ class ArcCodeCore:
         spinner_thread.start()
 
         for step in range(8):  # Max 8 steps for complex tasks
-            response = self._call_llama_server(messages)
-
-            # Stop spinner
-            spinner_running = False
-            if spinner_thread:
-                spinner_thread.join(timeout=0.2)
+            # Define callback to stop spinner when first token arrives
+            def stop_spinner():
+                nonlocal spinner_running, was_streamed
+                spinner_running = False
+                was_streamed = True  # Mark that we're streaming
+                if spinner_thread:
+                    spinner_thread.join(timeout=0.2)
+                # Clear spinner line
+                sys.stdout.write("\r" + " " * 60 + "\r")
+                sys.stdout.flush()
             
-            # Clear spinner line
-            sys.stdout.write("\r" + " " * 60 + "\r")
-            sys.stdout.flush()
+            # Call LLM with streaming output - spinner will stop on first token
+            response = self._call_llama_server(messages, stream_output=True, on_first_token=stop_spinner)
+            
+            # Ensure spinner is stopped even if no tokens received
+            if spinner_running:
+                spinner_running = False
+                if spinner_thread:
+                    spinner_thread.join(timeout=0.2)
+                sys.stdout.write("\r" + " " * 60 + "\r")
+                sys.stdout.flush()
 
             try:
                 data = json.loads(response)
             except json.JSONDecodeError:
                 # Non-JSON response - treat as final answer
                 self.conversation_history.append({"role": "assistant", "content": response})
-                return response
+                return f"__STREAMED__{response}"
 
             if "final" in data:
                 # Final answer
                 final_msg = data["final"]
                 self.conversation_history.append({"role": "assistant", "content": final_msg})
-                return final_msg
+                # Set streamed flag so REPL knows not to print again
+                return f"__STREAMED__{final_msg}"
 
             # Tool call
             tool_name = data.get("tool")
@@ -834,7 +849,7 @@ class ArcCodeCore:
             else:
                 # No tool call, treat as final
                 self.conversation_history.append({"role": "assistant", "content": response})
-                return response
+                return f"__STREAMED__{response}"
 
         return f"{self._style('⚠️', 'yellow')} Reached maximum agent steps. Consider breaking down the task."
 
@@ -1093,7 +1108,12 @@ class ArcCodeCore:
                         print(f"\n{self._style('Goodbye!', 'green', bold=True)}")
                         break
 
-                    print(result)
+                    # Only print if result wasn't already streamed
+                    if result and not result.startswith("__STREAMED__"):
+                        print(result)
+                    elif result and result.startswith("__STREAMED__"):
+                        # Remove the marker
+                        result = result[12:]
 
                 except KeyboardInterrupt:
                     print(f"\n{self._style('Goodbye!', 'green', bold=True)}")
