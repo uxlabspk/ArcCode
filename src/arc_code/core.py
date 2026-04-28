@@ -108,29 +108,29 @@ class ArcCodeCore:
 
         # Show quick stats
         cwd = os.getcwd()
-        print(f"  {self._style('◉', 'cyan')} {self._style('Working Dir:', 'gray')} {cwd}")
-        print(f"  {self._style('◉', 'cyan')} {self._style('Tools:', 'gray')} {len(self.tools)} registered  "
-              f"{self._style('│', 'dark_gray')}  "
+        print(f"  {self._style('>', 'cyan')} {self._style('Working Dir:', 'gray')} {cwd}")
+        print(f"  {self._style('>', 'cyan')} {self._style('Tools:', 'gray')} {len(self.tools)} registered  "
+              f"{self._style('|', 'dark_gray')}  "
               f"{self._style('History:', 'gray')} {len(self.history)} commands")
         print()
 
         home_dir = os.path.expanduser("~")
         if os.getcwd() == home_dir:
-            print(f"  {self._style('⚠  WARNING: You are in the home directory', 'yellow', bold=True)}")
+            print(f"  {self._style('! WARNING: You are in the home directory', 'yellow', bold=True)}")
             print(f"  {self._style('   Running in this location is not recommended.', 'yellow')}")
             print(f"  {self._style('   Consider navigating to a project directory.', 'yellow')}")
             print()
 
     def _print_tool_call(self, tool_name: str, args: Dict[str, Any]):
         """Print a formatted tool call indicator"""
-        print(f"\n  {self._style('→', 'cyan', bold=True)} {self._style(f'Calling {tool_name}...', 'cyan')}")
+        print(f"\n  {self._style('->', 'cyan', bold=True)} {self._style(f'Calling {tool_name}...', 'cyan')}")
         if args and self.verbose:
             for key, val in args.items():
                 print(f"     {self._style(f'{key}:', 'gray')} {self._style(str(val), 'yellow')}")
 
     def _print_tool_result(self, success: bool, preview: str = ""):
         """Print a formatted tool results indicator"""
-        icon = "✓" if success else "✗"
+        icon = "[+]" if success else "[-]"
         color = "green" if success else "red"
         status = "Success" if success else "Failed"
         print(f"  {self._style(icon, color, bold=True)} {self._style(status, color)}")
@@ -223,13 +223,13 @@ class ArcCodeCore:
             if dirs:
                 result.append(f"\n{self._style('Directories:', 'cyan', bold=True)}")
                 for d in dirs:
-                    result.append(f"  {self._style('📁', 'cyan')} {d.name}/")
+                    result.append(f"  {self._style('[D]', 'cyan')} {d.name}/")
             if files:
                 result.append(f"\n{self._style('Files:', 'yellow')}")
                 for f in files:
                     size = f.stat().st_size
                     size_str = self._format_size(size)
-                    result.append(f"  {self._style('📄', 'gray')} {f.name} ({size_str})")
+                    result.append(f"  {self._style('[F]', 'gray')} {f.name} ({size_str})")
 
             result.append(f"\nTotal: {len(dirs)} dirs, {len(files)} files")
             return "\n".join(result)
@@ -307,7 +307,7 @@ class ArcCodeCore:
             with open(path, 'w', encoding='utf-8') as f:
                 f.write(new_content)
 
-            return f"{self._style('✓', 'green')} {self._style('Updated', 'green', bold=True)} {path}"
+            return f"{self._style('[OK]', 'green')} {self._style('Updated', 'green', bold=True)} {path}"
         except Exception as e:
             return f"Error editing file: {str(e)}"
 
@@ -322,7 +322,7 @@ class ArcCodeCore:
 
             result = [f"{self._style(f'Found {len(matches)} files matching', 'green', bold=True)} '{pattern}' in {search_path}"]
             for m in matches[:50]:  # Limit to 50 results
-                icon = "📁" if m.is_dir() else "📄"
+                icon = "[D]" if m.is_dir() else "[F]"
                 result.append(f"  {self._style(icon, 'gray')} {m}")
 
             if len(matches) > 50:
@@ -496,12 +496,12 @@ class ArcCodeCore:
         help_text.append(f"{self._style('║', 'cyan')}          {self._style('Arc Code - Help & Commands', 'orange', bold=True)}              {self._style('║', 'cyan')}")
         help_text.append(f"{self._style('╚══════════════════════════════════════════════════════════╝', 'cyan')}\n")
 
-        help_text.append(f"  {self._style('🔧 TOOLS', 'cyan', bold=True)}")
+        help_text.append(f"  {self._style('TOOLS', 'cyan', bold=True)}")
         help_text.append(f"  {self._style('─' * 50, 'gray')}")
         for name, info in sorted(self.tools.items()):
             help_text.append(f"    {self._style(name, 'green', bold=True):<20} {info['desc']}")
 
-        help_text.append(f"\n  {self._style('⚡ SLASH COMMANDS', 'cyan', bold=True)}")
+        help_text.append(f"\n  {self._style('SLASH COMMANDS', 'cyan', bold=True)}")
         help_text.append(f"  {self._style('─' * 50, 'gray')}")
         for name, info in sorted(self.slash_commands.items()):
             desc = info['desc']
@@ -522,7 +522,7 @@ class ArcCodeCore:
 
     def cmd_tools(self, args: str = "") -> str:
         """List available tools"""
-        output = [f"\n{self._style('🔧 Available Tools', 'cyan', bold=True)}"]
+        output = [f"\n{self._style('Available Tools', 'cyan', bold=True)}"]
         output.append(f"  {self._style('─' * 50, 'gray')}")
 
         for name, info in sorted(self.tools.items()):
@@ -538,7 +538,7 @@ class ArcCodeCore:
         """Show or change provider configuration"""
         if not args.strip():
             # Show current configuration
-            output = [f"\n{self._style('⚙️  Current Configuration', 'cyan', bold=True)}"]
+            output = [f"\n{self._style('Current Configuration', 'cyan', bold=True)}"]
             output.append(f"  {self._style('─' * 50, 'gray')}")
             output.append(f"  {self._style('Provider:', 'gray')} {self._style(self.provider, 'yellow', bold=True)}")
             output.append(f"  {self._style('Model:', 'gray')} {self._style(self.model, 'yellow', bold=True)}")
@@ -556,11 +556,11 @@ class ArcCodeCore:
         # Parse arguments
         parts = args.strip().split()
         if len(parts) < 1:
-            return f"{self._style('✗', 'red')} Usage: /config [provider] [model] [url]"
+            return f"[!] Usage: /config [provider] [model] [url]"
         
         provider = parts[0].lower()
         if provider not in ["llama.cpp", "ollama"]:
-            return f"{self._style('✗', 'red')} Invalid provider. Use 'llama.cpp' or 'ollama'"
+            return f"[!] Invalid provider. Use 'llama.cpp' or 'ollama'"
         
         old_provider = self.provider
         self.provider = provider
@@ -587,7 +587,7 @@ class ArcCodeCore:
         })
         self.settings.save()
         
-        return f"{self._style('✓', 'green')} Provider changed: {self._style(old_provider, 'gray')} → {self._style(self.provider, 'green', bold=True)}\n  {self._style('Model:', 'gray')} {self.model} | {self._style('Server:', 'gray')} {self.server_url}\n  {self._style('Settings saved!', 'dim')}"
+        return f"[OK] Provider changed: {self._style(old_provider, 'gray')} -> {self._style(self.provider, 'green', bold=True)}\n  {self._style('Model:', 'gray')} {self.model} | {self._style('Server:', 'gray')} {self.server_url}\n  {self._style('Settings saved!', 'dim')}"
 
     def cmd_model(self, args: str = "") -> str:
         """Show or change model settings"""
@@ -596,7 +596,7 @@ class ArcCodeCore:
             self.model = args.strip()
             self.settings.set("model", self.model)
             self.settings.save()
-            return f"{self._style('✓', 'green')} Model changed: {self._style(old_model, 'gray')} → {self._style(self.model, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
+            return f"[OK] Model changed: {self._style(old_model, 'gray')} -> {self._style(self.model, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
         return f"\n  {self._style('Model:', 'cyan')} {self._style(self.model, 'yellow', bold=True)}\n"
 
     def cmd_server(self, args: str = "") -> str:
@@ -606,13 +606,13 @@ class ArcCodeCore:
             self.server_url = args.strip().rstrip("/")
             self.settings.set("server_url", self.server_url)
             self.settings.save()
-            return f"{self._style('✓', 'green')} Server changed: {self._style(old_url, 'gray')} → {self._style(self.server_url, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
+            return f"[OK] Server changed: {self._style(old_url, 'gray')} -> {self._style(self.server_url, 'green', bold=True)}\n  {self._style('Settings saved!', 'dim')}"
         return f"\n  {self._style('Server:', 'cyan')} {self._style(self.server_url, 'yellow', bold=True)}\n"
 
     def cmd_clear(self, args: str = "") -> str:
         """Clear conversation history"""
         self.conversation_history = []
-        return f"{self._style('✓', 'green')} Conversation history cleared"
+        return f"[OK] Conversation history cleared"
 
     def cmd_history(self, args: str = "") -> str:
         """Show command history"""
@@ -621,7 +621,7 @@ class ArcCodeCore:
         except:
             count = 10
 
-        output = [f"\n{self._style('📜 Command History', 'cyan', bold=True)}"]
+        output = [f"\n{self._style('Command History', 'cyan', bold=True)}"]
         output.append(f"  {self._style('─' * 50, 'gray')}")
 
         recent = self.history[-count:]
@@ -637,7 +637,7 @@ class ArcCodeCore:
         self.thinking_mode = not self.thinking_mode
         status = "enabled" if self.thinking_mode else "disabled"
         color = "green" if self.thinking_mode else "yellow"
-        return f"{self._style('💭', 'cyan')} Thinking mode {self._style(status, color, bold=True)}"
+        return f"[think] Thinking mode {self._style(status, color, bold=True)}"
 
     def cmd_verbose(self, args: str = "") -> str:
         """Toggle verbose output"""
@@ -658,15 +658,15 @@ class ArcCodeCore:
             }
             with open(filename, 'w') as f:
                 json.dump(data, f, indent=2)
-            return f"{self._style('✓', 'green')} Saved to {self._style(filename, 'green', bold=True)}"
+            return f"[OK] Saved to {self._style(filename, 'green', bold=True)}"
         except Exception as e:
-            return f"{self._style('✗', 'red')} Error: {str(e)}"
+            return f"[!] Error: {str(e)}"
 
     def cmd_load(self, args: str = "") -> str:
         """Load conversation from file"""
         filename = args.strip()
         if not filename:
-            return f"{self._style('✗', 'red')} Please specify a filename"
+            return f"[!] Please specify a filename"
 
         try:
             with open(filename, 'r') as f:
@@ -674,13 +674,13 @@ class ArcCodeCore:
 
             self.history = data.get("history", [])
             self.conversation_history = data.get("conversation", [])
-            return f"{self._style('✓', 'green')} Loaded from {self._style(filename, 'green', bold=True)} ({len(self.history)} commands)"
+            return f"[OK] Loaded from {self._style(filename, 'green', bold=True)} ({len(self.history)} commands)"
         except Exception as e:
-            return f"{self._style('✗', 'red')} Error: {str(e)}"
+            return f"[!] Error: {str(e)}"
 
     def cmd_context(self, args: str = "") -> str:
         """Show context window info"""
-        output = [f"\n{self._style('🧠 Context Window', 'cyan', bold=True)}"]
+        output = [f"\n{self._style('Context Window', 'cyan', bold=True)}"]
         output.append(f"  {self._style('─' * 50, 'gray')}")
         output.append(f"  {self._style('Messages:', 'gray')} {len(self.conversation_history)}/{self.max_context_messages}")
         output.append(f"  {self._style('Thinking Mode:', 'gray')} {'On' if self.thinking_mode else 'Off'}")
@@ -755,9 +755,9 @@ class ArcCodeCore:
             self.server_url = self.settings.get("server_url").rstrip("/")
             self.verbose = self.settings.get("verbose", False)
             self.thinking_mode = self.settings.get("thinking_mode", False)
-            return f"{self._style('✓', 'green')} Settings reset to defaults\n  {self._style('Config file:', 'gray')} {self._style(str(self.settings.config_file), 'dim')}"
+            return f"[OK] Settings reset to defaults\n  {self._style('Config file:', 'gray')} {self._style(str(self.settings.config_file), 'dim')}"
         
-        return f"{self._style('✗', 'red')} Unknown argument. Use '/settings' or '/settings reset'"
+        return f"[!] Unknown argument. Use '/settings' or '/settings reset'"
 
     # ==========================================
     # LLM Integration
@@ -1007,7 +1007,7 @@ class ArcCodeCore:
             self.conversation_history.append({"role": "assistant", "content": final_response})
             return rendered
 
-        return f"{self._style('⚠️', 'yellow')} Reached maximum agent steps. Consider breaking down the task."
+        return f"[!] Reached maximum agent steps. Consider breaking down the task."
 
     def _build_system_prompt(self) -> str:
         """Build the system prompt for the LLM"""
@@ -1063,7 +1063,7 @@ class ArcCodeCore:
             if cmd_name in self.slash_commands:
                 return self.slash_commands[cmd_name]["fn"](cmd_args)
             else:
-                return f"{self._style('✗', 'red')} Unknown command: /{cmd_name}. Type /help for available commands."
+                return f"[!] Unknown command: /{cmd_name}. Type /help for available commands."
 
         # Try to parse as direct tool call
         parts = command.split(maxsplit=1)
@@ -1079,7 +1079,7 @@ class ArcCodeCore:
                 result = tool_info["fn"](**args)
                 return result
             except Exception as e:
-                return f"{self._style('✗', 'red')} Error: {str(e)}"
+                return f"[!] Error: {str(e)}"
         else:
             # Send to AI agent
             return self._run_agent(command)
