@@ -14,6 +14,7 @@ import urllib.error
 from typing import Dict, Any, Optional, List
 from pathlib import Path
 from arc_code.settings import SettingsManager
+from arc_code.markdown import TerminalMarkdownRenderer
 
 
 class ArcCodeCore:
@@ -37,6 +38,7 @@ class ArcCodeCore:
         self.tools = {}
         self.slash_commands = {}
         self.history = []
+        self.markdown_renderer = TerminalMarkdownRenderer(self._style)
 
         # UI Configuration
         self._colors = {
@@ -761,8 +763,13 @@ class ArcCodeCore:
     # LLM Integration
     # ==========================================
 
-    def _call_llama_server(self, messages: List[Dict[str, str]], stream_output: bool = True, on_first_token=None) -> str:
-        """Call the LLM server API with streaming support (supports both llama.cpp and Ollama)"""
+    def _call_llama_server_with_callback(
+        self, 
+        messages: List[Dict[str, str]], 
+        on_first_token=None,
+        stream_output: bool = True
+    ) -> str:
+        """Call the LLM server API with streaming support"""
         payload = {
             "model": self.model,
             "messages": messages,
@@ -773,10 +780,7 @@ class ArcCodeCore:
         data = json.dumps(payload).encode("utf-8")
         
         # Determine API endpoint based on provider
-        if self.provider == "ollama":
-            api_endpoint = f"{self.server_url}/v1/chat/completions"
-        else:  # llama.cpp
-            api_endpoint = f"{self.server_url}/v1/chat/completions"
+        api_endpoint = f"{self.server_url}/v1/chat/completions"
         
         req = urllib.request.Request(
             api_endpoint,
@@ -810,8 +814,9 @@ class ArcCodeCore:
                                 print(content, end="", flush=True)
                     except json.JSONDecodeError:
                         continue
+                # Add newline after streaming completes
                 if stream_output and full_content:
-                    print()  # Add newline after streaming completes
+                    print()
                 return "".join(full_content)
         except urllib.error.HTTPError as e:
             error_body = e.read().decode('utf-8', errors='replace') if hasattr(e, 'read') else ''
@@ -819,25 +824,11 @@ class ArcCodeCore:
         except Exception as e:
             return f"Error: {str(e)}"
 
-    def _run_agent(self, user_input: str) -> str:
-        """Run the agentic reasoning loop"""
-        # Build system prompt based on mode
-        system_prompt = self._build_system_prompt()
-
-        # Add to conversation history
-        messages = [
-            {"role": "system", "content": system_prompt},
-        ]
-
-        # Add recent conversation context
-        messages.extend(self.conversation_history[-self.max_context_messages:])
-        messages.append({"role": "user", "content": user_input})
-
-        # Show spinner with elapsed time
+    def _stream_final_response(self, messages: List[Dict[str, str]]) -> str:
+        """Stream the final response to user with real-time output"""
         start_time = time.time()
         spin_idx = 0
         spinner_running = True
-        was_streamed = False  # Track if response was streamed
         
         def update_spinner():
             """Update spinner animation with elapsed time"""
@@ -853,43 +844,103 @@ class ArcCodeCore:
         import threading
         spinner_thread = threading.Thread(target=update_spinner, daemon=True)
         spinner_thread.start()
+        
+        def on_first_token():
+            """Callback when first token arrives"""
+            nonlocal spinner_running
+            spinner_running = False
+            if spinner_thread:
+                spinner_thread.join(timeout=0.2)
+            # Clear spinner line
+            sys.stdout.write("\r" + " " * 80 + "\r")
+            sys.stdout.flush()
+
+        # Stream the response
+        response = self._call_llama_server_with_callback(messages, on_first_token, stream_output=True)
+        
+        # Ensure spinner is stopped
+        if spinner_running:
+            spinner_running = False
+            if spinner_thread:
+                spinner_thread.join(timeout=0.2)
+            sys.stdout.write("\r" + " " * 80 + "\r")
+            sys.stdout.flush()
+        
+        return response
+
+    def _run_agent(self, user_input: str) -> str:
+        """Run the agentic reasoning loop"""
+        # Build system prompt based on mode
+        system_prompt = self._build_system_prompt()
+
+        # Add to conversation history
+        messages = [
+            {"role": "system", "content": system_prompt},
+        ]
+
+        # Add recent conversation context
+        messages.extend(self.conversation_history[-self.max_context_messages:])
+        messages.append({"role": "user", "content": user_input})
+
+        is_final_step = False
+        final_response = ""
 
         for step in range(8):  # Max 8 steps for complex tasks
-            # Define callback to stop spinner when first token arrives
-            def stop_spinner():
-                nonlocal spinner_running, was_streamed
+            # Show spinner with elapsed time
+            start_time = time.time()
+            spin_idx = 0
+            spinner_running = True
+            
+            def update_spinner(message="Thinking"):
+                """Update spinner animation with elapsed time"""
+                nonlocal spin_idx
+                while spinner_running:
+                    elapsed = time.time() - start_time
+                    spin = self._spinner_frames[spin_idx % len(self._spinner_frames)]
+                    sys.stdout.write(f"\r  {self._style(spin, 'cyan')} {message}... {self._style(f'{elapsed:.1f}s', 'gray')}")
+                    sys.stdout.flush()
+                    spin_idx += 1
+                    time.sleep(0.1)
+            
+            import threading
+            spinner_thread = threading.Thread(target=update_spinner, daemon=True)
+            spinner_thread.start()
+            
+            def on_first_token():
+                """Callback when first token arrives"""
+                nonlocal spinner_running
                 spinner_running = False
-                was_streamed = True  # Mark that we're streaming
                 if spinner_thread:
                     spinner_thread.join(timeout=0.2)
                 # Clear spinner line
-                sys.stdout.write("\r" + " " * 60 + "\r")
+                sys.stdout.write("\r" + " " * 80 + "\r")
                 sys.stdout.flush()
+
+            # Call LLM without streaming during agent loop (we need to parse JSON)
+            response = self._call_llama_server_with_callback(messages, on_first_token, stream_output=False)
             
-            # Call LLM with streaming output - spinner will stop on first token
-            response = self._call_llama_server(messages, stream_output=True, on_first_token=stop_spinner)
-            
-            # Ensure spinner is stopped even if no tokens received
+            # Ensure spinner is stopped
             if spinner_running:
                 spinner_running = False
                 if spinner_thread:
                     spinner_thread.join(timeout=0.2)
-                sys.stdout.write("\r" + " " * 60 + "\r")
+                sys.stdout.write("\r" + " " * 80 + "\r")
                 sys.stdout.flush()
 
+            # Try to parse as JSON (tool call or final answer)
             try:
                 data = json.loads(response)
             except json.JSONDecodeError:
                 # Non-JSON response - treat as final answer
-                self.conversation_history.append({"role": "assistant", "content": response})
-                return f"__STREAMED__{response}"
+                final_response = response
+                is_final_step = True
+                break
 
             if "final" in data:
-                # Final answer
-                final_msg = data["final"]
-                self.conversation_history.append({"role": "assistant", "content": final_msg})
-                # Set streamed flag so REPL knows not to print again
-                return f"__STREAMED__{final_msg}"
+                # Final answer in JSON format
+                final_response = data["final"]
+                is_final_step = True
+                break
 
             # Tool call
             tool_name = data.get("tool")
@@ -898,23 +949,63 @@ class ArcCodeCore:
             if tool_name:
                 self._print_tool_call(tool_name, tool_args)
 
+                # Show working spinner during tool execution
+                tool_start = time.time()
+                tool_spin_idx = 0
+                tool_spinner_running = True
+                
+                def update_tool_spinner():
+                    nonlocal tool_spin_idx
+                    while tool_spinner_running:
+                        elapsed = time.time() - tool_start
+                        spin = self._spinner_frames[tool_spin_idx % len(self._spinner_frames)]
+                        sys.stdout.write(f"\r  {self._style(spin, 'yellow')} Working... {self._style(f'{elapsed:.1f}s', 'gray')}")
+                        sys.stdout.flush()
+                        tool_spin_idx += 1
+                        time.sleep(0.1)
+                
+                tool_spinner_thread = threading.Thread(target=update_tool_spinner, daemon=True)
+                tool_spinner_thread.start()
+
+                # Execute the tool
                 if tool_name in self.tools:
                     try:
                         tool_result = self.tools[tool_name]["fn"](**tool_args)
+                        tool_spinner_running = False
+                        tool_spinner_thread.join(timeout=0.2)
+                        sys.stdout.write("\r" + " " * 80 + "\r")
+                        sys.stdout.flush()
                         self._print_tool_result(True, tool_result)
                     except Exception as e:
                         tool_result = f"Tool error: {str(e)}"
+                        tool_spinner_running = False
+                        tool_spinner_thread.join(timeout=0.2)
+                        sys.stdout.write("\r" + " " * 80 + "\r")
+                        sys.stdout.flush()
                         self._print_tool_result(False, tool_result)
                 else:
                     tool_result = f"Unknown tool: {tool_name}"
+                    tool_spinner_running = False
+                    if tool_spinner_thread:
+                        tool_spinner_thread.join(timeout=0.2)
+                    sys.stdout.write("\r" + " " * 80 + "\r")
+                    sys.stdout.flush()
                     self._print_tool_result(False)
 
                 messages.append({"role": "assistant", "content": response})
                 messages.append({"role": "user", "content": f"Tool result: {tool_result}"})
+                # Loop continues to next iteration with new spinner
             else:
                 # No tool call, treat as final
-                self.conversation_history.append({"role": "assistant", "content": response})
-                return f"__STREAMED__{response}"
+                final_response = response
+                is_final_step = True
+                break
+
+        if is_final_step and final_response:
+            # Render with markdown
+            rendered = self.markdown_renderer.render(final_response)
+            self.conversation_history.append({"role": "assistant", "content": final_response})
+            return rendered
 
         return f"{self._style('⚠️', 'yellow')} Reached maximum agent steps. Consider breaking down the task."
 
@@ -1175,12 +1266,9 @@ class ArcCodeCore:
                         print(f"  {self._style(f'Session: {len(self.history)} commands executed', 'gray')}")
                         break
 
-                    # Only print if result wasn't already streamed
-                    if result and not result.startswith("__STREAMED__"):
+                    # Print result (already rendered with markdown)
+                    if result:
                         print(result)
-                    elif result and result.startswith("__STREAMED__"):
-                        # Remove the marker
-                        result = result[12:]
 
                 except KeyboardInterrupt:
                     print(f"\n  {self._style('Goodbye!', 'green', bold=True)}")
